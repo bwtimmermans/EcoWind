@@ -4,10 +4,34 @@
 
    flag_single_panel <- FALSE
 
-# Buoys.
-   #buoy_list <- c("41001","41010","41025","42001")
-   buoy_list <- c("46001","46002","46005","46006","46035","46059","46066","46070","46072","46073","46075","46078")
-   buoy_list <- c("46075")
+   vec_region <- c()
+   list_buoys <- list()
+# North Pacific.
+   list_buoys[[1]] <- c("46001","46002","46005","46006","46035","46059","46066","46070","46072","46073","46075","46078","46085")
+   vec_region[1] <- "North Pacific"
+# Hawaii.
+   list_buoys[[2]] <- c("51000","51001","51002","51003","51004","51101")
+   vec_region[2] <- "Hawaii"
+# Atlantic.
+   list_buoys[[3]] <- c("41001","41002","41010","41040","41041","41043","41044","41046","41047","41048","41049")
+   list_buoys[[3]] <- c("41001","41002","41010","41040","41041","41043")
+   vec_region[3] <- "Atlantic"
+# GoM.
+   list_buoys[[4]] <- c("42001","42002","42003","42055","42056","42057","42058","42059","42060")
+   vec_region[4] <- "Gulf of Mexico"
+# Individual.
+   #buoy_list <- c("46246")
+
+# Regions
+# 1. North Pacific
+# 2. Hawaii
+# 3. Atlantic
+# 4. Gulf of Mexico
+
+   i_region <- 4
+
+   lab_region <-vec_region[i_region]
+   buoy_list <- list_buoys[[i_region]]
 
 # Observation per hour.
    buoy_obs_freq <- c(1,2,1,1)
@@ -41,11 +65,25 @@
 
    for (b.idx in 1:length(buoy_list)) {
 
-      file_name_buoy <- paste("/backup/datasets/buoys/USACE/NDBC_complete_records/", list.files(path=paste("/backup/datasets/buoys/USACE/NDBC_complete_records/",sep=""), pattern=buoy_list[b.idx]), sep="")
+# Find buoy data.
+      file_list <- list.files(path=paste("/backup/datasets/buoys/USACE/NDBC_complete_records/",sep=""), pattern=buoy_list[b.idx])
+      flag_NOAA <- FALSE
+      if ( length(file_list) > 0 ) {
+         file_name_buoy <- paste("/backup/datasets/buoys/USACE/NDBC_complete_records/", list.files(path=paste("/backup/datasets/buoys/USACE/NDBC_complete_records/",sep=""), pattern=buoy_list[b.idx]), sep="")
+      } else {
+         print(paste(" WARNING: USACE data not detected."))
+         flag_NOAA <- TRUE
+         file_name_buoy <- paste("/home/ben/research/waves/buoy_data/NDBC_complete_records/", list.files(path=paste("/home/ben/research/waves/buoy_data/NDBC_complete_records/",sep=""), pattern=buoy_list[b.idx]), sep="")
+      }
       df_buoy_csv <- read.csv(file_name_buoy)
       vec_buoy_time1 <- strptime(df_buoy_csv[,1], "%Y-%m-%d %H:%M:%S")
-      vec_buoy_hs1 <- df_buoy_csv$waveHs
-      vec_buoy_tm1 <- df_buoy_csv$waveTm
+      if ( flag_NOAA ) {
+         vec_buoy_hs1 <- df_buoy_csv$hs
+         vec_buoy_tm1 <- df_buoy_csv$ap
+      } else {
+         vec_buoy_hs1 <- df_buoy_csv$waveHs
+         vec_buoy_tm1 <- df_buoy_csv$waveTm
+      }
 # Remove missing data.
       vec_buoy_time <- vec_buoy_time1[!is.na(vec_buoy_hs1)]
       vec_buoy_hs <- vec_buoy_hs1[!is.na(vec_buoy_hs1)]
@@ -150,6 +188,9 @@
 # Find time step differences in buoy time series.
             vec_buoy_time_diff <- c()
             for (t_idx in 2:length(as.numeric(vec_buoy_time_month))) { vec_buoy_time_diff[t_idx-1] <- as.numeric(vec_buoy_time_month[t_idx])-as.numeric(vec_buoy_time_month[t_idx-1]) }
+# Correction for 30 minute sampling.
+            #vec_buoy_time_ignore <- c()
+            #for (t_idx in 2:length(as.numeric(vec_buoy_time_month))) { if ( as.numeric(vec_buoy_time_month[t_idx])-as.numeric(vec_buoy_time_month[t_idx-1]) < 3600 ) { vec_buoy_time_ignore[t_idx] <- t_idx } }
  
 ## Correction for sub-hourly time series (e.g. 46059).
 #         if ( median(vec_buoy_time_diff) == 600 ) {
@@ -162,6 +203,8 @@
 #         vec_buoy_time_diff <- c()
 #         for (t_idx in 2:length(as.numeric(vec_buoy_time_month))) { vec_buoy_time_diff[t_idx-1] <- as.numeric(vec_buoy_time_month[t_idx])-as.numeric(vec_buoy_time_month[t_idx-1]) }
 
+# Find gaps in time series by looking at larger time steps.
+# There is a problem here for buoy observation frequency < 60 minutes.
             vec_buoy_miss <- which( vec_buoy_time_diff > 1.01*range(vec_buoy_time_diff)[1] )
             if ( length(vec_buoy_miss) >= 1 ) {
                for ( miss_idx in 1:length(vec_buoy_miss) ) {
@@ -282,14 +325,14 @@
 # https://r-graph-gallery.com/2d-density-plot-with-ggplot2
 # https://stats.stackexchange.com/questions/12392/how-to-compare-two-datasets-with-q-q-plot-using-ggplot2
       require(ggplot2)
-      fig_scatter_filename <- "./figures/ggplot_scatter_test"
+      fig_scatter_filename <- paste0("./figures/ggplot_scatter_",paste0(unlist(strsplit(lab_region,split=" ")),collapse="_"),"_test.png")
 # Data for Q-Q plot.
       qq_data <- as.data.frame(qqplot(df_reg$buoy_hs, df_reg$ww3_hs, plot.it=FALSE))
 
       p1 <- ggplot(df_reg, aes(x=buoy_hs, y=ww3_hs) ) +
       geom_hex(bins = 70) +
       xlim(0,10) + ylim(0,10) +
-      ggtitle(paste0("Region",buoy_list[1])) + xlab("Buoys") + ylab("WW3") +
+      ggtitle(paste0("Region ",lab_region)) + xlab("Buoys") + ylab("WW3") +
       geom_abline(slope = 1, intercept = 0, colour = "red", linewidth = 5) +
       scale_fill_continuous(type = "viridis") +
       theme(
